@@ -60,9 +60,33 @@
             
             <!-- 課文選擇列表 -->
             <div x-show="!isPlaying" class="bg-white p-6 rounded-2xl shadow-sm border border-teal-100">
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
                     <h2 class="text-xl font-bold text-teal-800">請選擇課文開始聽寫練習：</h2>
-                    <span class="text-xs text-teal-600 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">語音：台灣國語 (zh-TW)</span>
+                    <span class="text-xs text-teal-600 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">語音鎖定：台灣 (zh-TW)</span>
+                </div>
+
+                <!-- 說話的人 (台灣語音選擇與試聽) -->
+                <div class="mb-6 bg-teal-50/60 p-4 rounded-xl border border-teal-100 space-y-3">
+                    <div class="flex flex-wrap justify-between items-center gap-2">
+                        <label class="block font-bold text-gray-800 text-base">說話的人</label>
+                        <button @click="testVoice()" type="button" class="text-sm bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-1.5 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                            試聽音量
+                        </button>
+                    </div>
+                    
+                    <select x-model="selectedVoiceURI" @change="onVoiceChange()" class="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm">
+                        <template x-if="twVoices.length === 0">
+                            <option value="">系統預設台灣語音 (zh-TW)</option>
+                        </template>
+                        <template x-for="voice in twVoices" :key="voice.voiceURI">
+                            <option :value="voice.voiceURI" x-text="voice.name"></option>
+                        </template>
+                    </select>
+
+                    <div class="p-3 bg-white/80 border border- dashed border-teal-300 rounded-xl text-gray-600 text-sm leading-relaxed">
+                        換一個人說話後，按「試聽音量」聽聽看。名字有 <span class="font-semibold text-teal-800">Google</span>、<span class="font-semibold text-teal-800">Natural</span> 或 <span class="font-semibold text-teal-800">Online</span> 的通常比較清楚。
+                    </div>
                 </div>
                 
                 <div x-show="lessons.length === 0" class="text-gray-500 py-10 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
@@ -96,28 +120,18 @@
                     <div class="text-teal-700 font-bold bg-teal-50 px-3 py-1 rounded-lg border border-teal-200" x-text="`第 ${currentWordIndex + 1} / ${currentLesson?.words.length} 題`"></div>
                 </div>
 
-                <!-- 播音按鈕與輸入區 -->
+                <!-- 播音按鈕與答案顯示區 -->
                 <div class="w-full bg-teal-50/80 rounded-2xl p-6 md:p-8 mb-6 flex flex-col items-center justify-center border border-teal-100">
                     
                     <button @click="repeatWord()" class="w-24 h-24 bg-teal-500 hover:bg-teal-600 text-white rounded-full flex items-center justify-center shadow-lg transition-transform transform hover:scale-105 active:scale-95 mb-4">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                     </button>
-                    <p class="text-teal-700 font-medium mb-6 text-sm">點擊喇叭圖示可重複聽取發音</p>
+                    <p class="text-teal-700 font-medium mb-4 text-sm">點擊喇叭圖示可重複聽取發音</p>
 
-                    <div class="w-full max-w-md space-y-4 text-center">
-                        <div class="flex flex-col sm:flex-row items-center gap-3">
-                            <input type="text" x-model="userInput" @keyup.enter="checkAnswer()" :disabled="isChecking"
-                                   class="w-full text-2xl text-center border-2 border-teal-300 rounded-xl px-4 py-3 focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all bg-white"
-                                   placeholder="請輸入聽到的圈詞...">
-                            <button @click="checkAnswer()" class="w-full sm:w-auto shrink-0 bg-teal-600 hover:bg-teal-700 text-white px-6 py-3.5 rounded-xl font-bold shadow-md transition-colors">
-                                送出檢查
-                            </button>
-                        </div>
-                        
-                        <!-- 答案顯示區 -->
-                        <div class="min-h-[3.5rem] flex items-center justify-center pt-2">
-                            <div x-show="showAnswer" x-transition class="text-3xl font-bold tracking-widest text-teal-800 bg-white px-6 py-2 rounded-xl shadow-sm border border-teal-200" x-text="currentWord"></div>
-                        </div>
+                    <!-- 答案顯示區 -->
+                    <div class="min-h-[4rem] flex items-center justify-center">
+                        <div x-show="showAnswer" x-transition class="text-4xl font-bold tracking-widest text-teal-800 bg-white px-8 py-3 rounded-xl shadow-sm border border-teal-200" x-text="currentWord"></div>
+                        <div x-show="!showAnswer" class="text-gray-400 text-sm">請在聽寫本上寫下圈詞，完成後可點選下方「看答案」核對</div>
                     </div>
                 </div>
 
@@ -136,11 +150,24 @@
                     </button>
                 </div>
 
-                <!-- 語速調整 -->
-                <div class="mt-8 w-full max-w-sm flex items-center gap-3 text-gray-600 font-medium text-sm bg-gray-50 px-4 py-2.5 rounded-xl border border-gray-200">
-                    <span>報讀語速：</span>
-                    <input type="range" x-model.number="speechRate" min="0.5" max="1.3" step="0.1" class="flex-grow accent-teal-600 cursor-pointer">
-                    <span x-text="speechRate + 'x'" class="w-10 text-right font-bold text-teal-700"></span>
+                <!-- 說話的人與語速調整區 -->
+                <div class="mt-8 w-full max-w-md space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-200 text-sm">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-gray-600 font-medium shrink-0">說話的人：</span>
+                        <select x-model="selectedVoiceURI" @change="onVoiceChange()" class="flex-grow px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500 text-xs sm:text-sm truncate">
+                            <template x-if="twVoices.length === 0">
+                                <option value="">系統預設台灣語音 (zh-TW)</option>
+                            </template>
+                            <template x-for="voice in twVoices" :key="voice.voiceURI">
+                                <option :value="voice.voiceURI" x-text="voice.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-3 text-gray-600 font-medium">
+                        <span class="shrink-0">報讀語速：</span>
+                        <input type="range" x-model.number="speechRate" min="0.5" max="1.3" step="0.1" class="flex-grow accent-teal-600 cursor-pointer">
+                        <span x-text="speechRate + 'x'" class="w-10 text-right font-bold text-teal-700"></span>
+                    </div>
                 </div>
             </div>
             
@@ -334,9 +361,9 @@
             currentLesson: null,
             currentWordIndex: 0,
             showAnswer: false,
-            userInput: '',
-            isChecking: false,
             speechRate: 0.8,
+            twVoices: [],
+            selectedVoiceURI: '',
             twVoice: null,
 
             // 老師管理驗證與密碼狀態
@@ -377,11 +404,49 @@
 
             initSpeechSynthesis() {
                 if (!('speechSynthesis' in window)) return;
-                const voices = window.speechSynthesis.getVoices();
-                // 嚴格優先尋找台灣 (zh-TW) 語音
-                this.twVoice = voices.find(v => v.lang === 'zh-TW' || v.lang === 'zh-Hant-TW' || v.name.includes('Taiwan') || v.name.includes('臺灣') || v.name.includes('台灣'))
-                            || voices.find(v => v.lang && v.lang.includes('zh'))
-                            || null;
+                const allVoices = window.speechSynthesis.getVoices();
+                if (!allVoices || allVoices.length === 0) return;
+
+                // 1. 嚴格篩選台灣 (Taiwan / zh-TW) 的語音
+                let filtered = allVoices.filter(v => {
+                    const lang = (v.lang || '').toLowerCase();
+                    const name = (v.name || '').toLowerCase();
+                    return lang === 'zh-tw' || lang === 'zh-hant-tw' || lang === 'cmn-hant-tw' ||
+                           name.includes('taiwan') || name.includes('臺灣') || name.includes('台灣');
+                });
+
+                // 2. 將名字有 Google、Natural 或 Online 的台灣語音排在最前面
+                const isPreferred = (v) => /google|natural|online/i.test(v.name);
+                filtered.sort((a, b) => {
+                    const aPref = isPreferred(a) ? 1 : 0;
+                    const bPref = isPreferred(b) ? 1 : 0;
+                    return bPref - aPref;
+                });
+
+                this.twVoices = filtered;
+
+                // 3. 設定預設選中的台灣語音（優先保留使用者已選的，否則自動挑排序第一的清楚人聲）
+                if (this.selectedVoiceURI && filtered.some(v => v.voiceURI === this.selectedVoiceURI)) {
+                    this.twVoice = filtered.find(v => v.voiceURI === this.selectedVoiceURI);
+                } else if (filtered.length > 0) {
+                    this.twVoice = filtered[0];
+                    this.selectedVoiceURI = filtered[0].voiceURI;
+                } else {
+                    this.twVoice = allVoices.find(v => v.lang && v.lang.toLowerCase().includes('zh')) || null;
+                    this.selectedVoiceURI = this.twVoice ? this.twVoice.voiceURI : '';
+                }
+            },
+
+            onVoiceChange() {
+                const found = this.twVoices.find(v => v.voiceURI === this.selectedVoiceURI);
+                if (found) {
+                    this.twVoice = found;
+                }
+            },
+
+            testVoice() {
+                window.PlaySound('click');
+                this.speakText('國語聽寫練習，語音測試');
             },
 
             speakText(text) {
@@ -391,8 +456,9 @@
                 }
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
-                if (this.twVoice) {
-                    utterance.voice = this.twVoice;
+                const selected = this.twVoices.find(v => v.voiceURI === this.selectedVoiceURI) || this.twVoice;
+                if (selected) {
+                    utterance.voice = selected;
                 }
                 utterance.lang = 'zh-TW';
                 utterance.rate = this.speechRate;
@@ -401,7 +467,7 @@
 
             async initDatabase() {
                 // ⚠️ 如需連接您自己的 Firebase，請將下方設定替換為您的專案金鑰
-     const firebaseConfig = {
+               const firebaseConfig = {
   apiKey: "AIzaSyCd3tqkmxYzFC30hsj63WGLrCmbgoHKrN4",
   authDomain: "listen-e8f45.firebaseapp.com",
   projectId: "listen-e8f45",
@@ -409,6 +475,7 @@
   messagingSenderId: "835797547922",
   appId: "1:835797547922:web:70ac8c25e932a53ef29f4b"
 };
+
 
                 // 檢查是否尚未替換預設字串，若尚未設定則自動啟用 LocalStorage 本地儲存與範例課文
                 if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {

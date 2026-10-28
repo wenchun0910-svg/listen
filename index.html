@@ -6,164 +6,402 @@
     <title>國語聽寫機</title>
     <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- 引入 Google Fonts: Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+
     <style>
-        /* 避免 Alpine 載入前畫面閃爍 */
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdfa; /* Tailwind teal-50 */
+        }
+        /* 避免 Alpine 啟動前閃爍 */
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen font-sans text-gray-800">
+<body class="text-gray-800 antialiased min-h-screen flex flex-col" x-data="dictationApp()" x-cloak>
 
-    <!-- Alpine.js 應用程式根容器 -->
-    <div x-data="dictationApp()" x-cloak class="max-w-5xl mx-auto p-4 md:p-6">
-        
-        <!-- 頂部導覽列 -->
-        <header class="flex justify-between items-center bg-white shadow-md rounded-xl p-4 mb-6">
-            <h1 class="text-2xl font-bold text-blue-600 flex items-center gap-2">
+    <!-- 頂部導覽列 -->
+    <header class="bg-teal-600 text-white shadow-md">
+        <div class="max-w-5xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-3">
+            <h1 class="text-2xl font-bold flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 國語聽寫機
             </h1>
-            <div class="flex gap-2">
-                <button x-show="appMode === 'teacher'" @click="showPasswordChangeModal = true" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition">
+            <nav class="flex items-center gap-3">
+                <button x-show="viewMode === 'admin'" @click="openPasswordModal()" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                     修改密碼
                 </button>
-                <button @click="toggleMode()" class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition shadow">
-                    <span x-text="appMode === 'student' ? '老師管理' : '返回學生模式'"></span>
+                <button @click="toggleMode()" class="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-lg font-medium transition-colors shadow-sm">
+                    <span x-text="viewMode === 'student' ? '老師管理' : '返回學生模式'"></span>
                 </button>
-            </div>
-        </header>
+            </nav>
+        </div>
+    </header>
 
-        <!-- 學生模式：選擇課文與聽寫介面 -->
-        <main x-show="appMode === 'student'" class="space-y-6">
-            
-            <div x-show="!isDictating" class="bg-white p-6 rounded-xl shadow-md">
-                <h2 class="text-xl font-bold mb-4 text-gray-700">請選擇課文：</h2>
-                <div x-show="lessons.length === 0" class="text-center py-10 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                    尚無課文資料，請由老師管理介面新增。
+    <!-- 主要內容區 -->
+    <main class="flex-grow max-w-5xl mx-auto w-full px-4 py-8 relative">
+        
+        <!-- 全域提示訊息 (Toast) -->
+        <div class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
+            <template x-for="toast in toasts" :key="toast.id">
+                <div x-transition.opacity.duration.300ms
+                     class="px-6 py-3 rounded-xl shadow-lg text-white font-medium text-center"
+                     :class="{'bg-emerald-600': toast.type === 'success', 'bg-rose-600': toast.type === 'error', 'bg-sky-600': toast.type === 'info'}">
+                    <span x-text="toast.message"></span>
                 </div>
+            </template>
+        </div>
+
+        <!-- ===== 聽寫模式 (學生視角) ===== -->
+        <div x-show="viewMode === 'student'" class="space-y-6">
+            
+            <!-- 課文選擇列表 -->
+            <div x-show="!isPlaying" class="bg-white p-6 rounded-2xl shadow-sm border border-teal-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-teal-800">請選擇課文開始聽寫練習：</h2>
+                    <span class="text-xs text-teal-600 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">語音：台灣國語 (zh-TW)</span>
+                </div>
+                
+                <div x-show="lessons.length === 0" class="text-gray-500 py-10 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    目前還沒有建立任何課文，請點選右上角「老師管理」新增課文與圈詞。
+                </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     <template x-for="lesson in lessons" :key="lesson.id">
-                        <button @click="startDictation(lesson)" class="p-4 border-2 border-blue-200 bg-blue-50 rounded-xl hover:bg-blue-100 hover:border-blue-300 transition text-lg font-semibold text-blue-800 shadow-sm flex flex-col items-center gap-2">
-                            <span x-text="lesson.title"></span>
-                            <span class="text-sm font-normal text-gray-500" x-text="`共 ${lesson.words.length} 個圈詞`"></span>
+                        <button @click="startDictation(lesson)" class="text-left bg-teal-50/70 hover:bg-teal-100 border-2 border-teal-200 p-5 rounded-xl transition-all shadow-sm flex justify-between items-center group">
+                            <div>
+                                <h3 class="font-bold text-teal-900 text-lg" x-text="lesson.title"></h3>
+                                <p class="text-teal-600 text-sm mt-1" x-text="`共 ${lesson.words.length} 個圈詞`"></p>
+                            </div>
+                            <div class="w-11 h-11 rounded-full bg-teal-200 text-teal-800 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
                         </button>
                     </template>
                 </div>
             </div>
 
             <!-- 聽寫進行中介面 -->
-            <div x-show="isDictating" class="bg-white p-8 rounded-xl shadow-md text-center max-w-2xl mx-auto border-t-4 border-blue-500">
-                <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-gray-700" x-text="currentLesson?.title"></h2>
-                    <span class="text-lg font-medium bg-blue-100 text-blue-800 py-1 px-3 rounded-full" x-text="`第 ${currentWordIndex + 1} / ${currentWords.length} 題`"></span>
-                </div>
+            <div x-show="isPlaying && currentLesson" class="bg-white p-6 md:p-10 rounded-3xl shadow-lg border border-teal-100 max-w-3xl mx-auto flex flex-col items-center">
                 
-                <div class="my-8">
-                    <button @click="playWordAudio()" class="w-24 h-24 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center mx-auto transition transform hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5 10v4a2 2 0 002 2h2.586l4.707 4.707A.996.996 0 0015 20V4a.996.996 0 00-1.707-.707L9.586 10H7a2 2 0 00-2 2z" />
-                        </svg>
+                <div class="w-full flex flex-wrap justify-between items-center gap-2 mb-6">
+                    <button @click="stopDictation()" class="text-gray-500 hover:text-rose-600 font-medium flex items-center gap-1 transition-colors px-2 py-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
+                        返回列表
                     </button>
-                    <p class="mt-4 text-gray-500 font-medium">點擊播放語音</p>
+                    <div class="text-teal-900 font-bold bg-teal-100 px-4 py-1.5 rounded-full text-lg" x-text="currentLesson?.title"></div>
+                    <div class="text-teal-700 font-bold bg-teal-50 px-3 py-1 rounded-lg border border-teal-200" x-text="`第 ${currentWordIndex + 1} / ${currentLesson?.words.length} 題`"></div>
                 </div>
 
-                <div class="space-y-4">
-                    <input type="text" x-model="studentAnswer" @keyup.enter="checkAnswer()" placeholder="請輸入聽到的圈詞..." class="w-full text-center text-3xl p-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-200 transition">
-                    <button @click="checkAnswer()" class="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow-md transition">
-                        送出答案
+                <!-- 播音按鈕與輸入區 -->
+                <div class="w-full bg-teal-50/80 rounded-2xl p-6 md:p-8 mb-6 flex flex-col items-center justify-center border border-teal-100">
+                    
+                    <button @click="repeatWord()" class="w-24 h-24 bg-teal-500 hover:bg-teal-600 text-white rounded-full flex items-center justify-center shadow-lg transition-transform transform hover:scale-105 active:scale-95 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    </button>
+                    <p class="text-teal-700 font-medium mb-6 text-sm">點擊喇叭圖示可重複聽取發音</p>
+
+                    <div class="w-full max-w-md space-y-4 text-center">
+                        <div class="flex flex-col sm:flex-row items-center gap-3">
+                            <input type="text" x-model="userInput" @keyup.enter="checkAnswer()" :disabled="isChecking"
+                                   class="w-full text-2xl text-center border-2 border-teal-300 rounded-xl px-4 py-3 focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-100 transition-all bg-white"
+                                   placeholder="請輸入聽到的圈詞...">
+                            <button @click="checkAnswer()" class="w-full sm:w-auto shrink-0 bg-teal-600 hover:bg-teal-700 text-white px-6 py-3.5 rounded-xl font-bold shadow-md transition-colors">
+                                送出檢查
+                            </button>
+                        </div>
+                        
+                        <!-- 答案顯示區 -->
+                        <div class="min-h-[3.5rem] flex items-center justify-center pt-2">
+                            <div x-show="showAnswer" x-transition class="text-3xl font-bold tracking-widest text-teal-800 bg-white px-6 py-2 rounded-xl shadow-sm border border-teal-200" x-text="currentWord"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 題目切換與看答案控制列 -->
+                <div class="w-full flex justify-between items-center gap-3">
+                    <button @click="prevWord()" :disabled="currentWordIndex === 0" class="flex-1 py-3.5 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                        上一題
+                    </button>
+                    
+                    <button @click="revealAnswer()" class="flex-1 py-3.5 rounded-xl font-bold text-teal-800 bg-teal-100 hover:bg-teal-200 transition-colors">
+                        看答案
+                    </button>
+                    
+                    <button @click="nextWord()" class="flex-1 py-3.5 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors">
+                        <span x-text="currentWordIndex === currentLesson?.words.length - 1 ? '完成練習' : '下一題'"></span>
                     </button>
                 </div>
 
-                <div class="mt-6 flex justify-between">
-                    <button @click="endDictation()" class="text-gray-500 hover:text-gray-700 font-medium px-4 py-2">
-                        放棄並返回
+                <!-- 語速調整 -->
+                <div class="mt-8 w-full max-w-sm flex items-center gap-3 text-gray-600 font-medium text-sm bg-gray-50 px-4 py-2.5 rounded-xl border border-gray-200">
+                    <span>報讀語速：</span>
+                    <input type="range" x-model.number="speechRate" min="0.5" max="1.3" step="0.1" class="flex-grow accent-teal-600 cursor-pointer">
+                    <span x-text="speechRate + 'x'" class="w-10 text-right font-bold text-teal-700"></span>
+                </div>
+            </div>
+            
+            <!-- 完成練習畫面 -->
+            <div x-show="isFinished" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white p-8 md:p-10 rounded-3xl shadow-2xl text-center border-4 border-teal-400 max-w-md w-full">
+                    <div class="text-6xl mb-4">🎉</div>
+                    <h2 class="text-3xl font-bold text-teal-800 mb-2">太棒了！</h2>
+                    <p class="text-gray-600 text-lg mb-8" x-text="`你已經完成「${currentLesson?.title}」的聽寫練習！`"></p>
+                    <button @click="stopDictation()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold px-8 py-3.5 rounded-xl text-lg shadow-lg transition">
+                        返回課文列表
                     </button>
                 </div>
             </div>
-        </main>
 
-        <!-- 老師管理模式 -->
-        <main x-show="appMode === 'teacher'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        </div>
+
+        <!-- ===== 老師管理模式 (管理員視角) ===== -->
+        <div x-show="viewMode === 'admin'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md h-fit">
-                <h2 class="text-xl font-bold mb-4 text-gray-700 border-b pb-2" x-text="isEditing ? '編輯課文' : '新增課文'"></h2>
-                <form @submit.prevent="saveLesson" class="space-y-4">
+            <!-- 新增/編輯表單 -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-teal-100 h-fit">
+                <h2 class="text-xl font-bold text-teal-800 mb-6 flex items-center gap-2 border-b pb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    <span x-text="isEditing ? '編輯課文與圈詞' : '新增課文與圈詞'"></span>
+                </h2>
+                
+                <form @submit.prevent="saveLesson()" class="space-y-5">
                     <div>
-                        <label class="block text-gray-700 font-medium mb-1">課文標題</label>
-                        <input type="text" x-model="formTitle" required placeholder="例如：第一課 春天來了" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500">
+                        <label class="block text-gray-700 font-bold mb-2">課文標題</label>
+                        <input type="text" x-model="formTitle" required class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="例如：第一課 春天來了">
                     </div>
+                    
                     <div>
-                        <label class="block text-gray-700 font-medium mb-1">圈詞 (批次匯入)</label>
-                        <textarea x-model="formWordsText" required rows="6" placeholder="請以空白或換行分隔圈詞" class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"></textarea>
+                        <label class="block text-gray-700 font-bold mb-1">批次匯入圈詞</label>
+                        <p class="text-xs text-gray-500 mb-2">請使用「換行」、「空白」或「逗號」分隔多個圈詞。</p>
+                        <textarea x-model="formWordsText" required rows="6" class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="春天&#10;花朵&#10;蝴蝶"></textarea>
                     </div>
-                    <div class="flex gap-2 pt-2">
-                        <button type="submit" :disabled="isSaving" class="flex-1 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-300 text-white font-bold py-2 px-4 rounded-lg transition-colors" x-text="isSaving ? '儲存中...' : (isEditing ? '儲存修改' : '新增課文')"></button>
-                        <button type="button" x-show="isEditing" @click="resetForm()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg transition-colors">取消</button>
+
+                    <div class="flex gap-3 pt-2">
+                        <button type="submit" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition-colors disabled:opacity-50" :disabled="isSaving">
+                            <span x-text="isSaving ? '儲存中...' : (isEditing ? '儲存修改' : '建立課文')"></span>
+                        </button>
+                        <button type="button" x-show="isEditing" @click="resetForm()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2.5 px-4 rounded-xl transition-colors">
+                            取消
+                        </button>
                     </div>
                 </form>
             </div>
 
-            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
-                <h2 class="text-xl font-bold mb-4 text-gray-700 border-b pb-2">現有課文管理</h2>
-                <div x-show="lessons.length === 0" class="text-center py-10 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                    尚無資料，請由左側新增課文。
+            <!-- 課文清單管理 -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-teal-100">
+                <div class="flex justify-between items-center mb-6 border-b pb-3">
+                    <h2 class="text-xl font-bold text-teal-800">現有課文清單管理</h2>
+                    <span class="text-sm text-gray-500" x-text="`共 ${lessons.length} 課`"></span>
                 </div>
-                <div class="space-y-3">
+                
+                <div x-show="lessons.length === 0" class="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                    尚無課文資料，請由左側表單新增課文。
+                </div>
+
+                <div class="space-y-4">
                     <template x-for="lesson in lessons" :key="lesson.id">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800" x-text="lesson.title"></h3>
-                                <p class="text-sm text-gray-500 mt-1" x-text="lesson.words.join('、')"></p>
+                        <div class="border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow bg-gray-50/70">
+                            <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                                <h3 class="text-lg font-bold text-teal-900" x-text="lesson.title"></h3>
+                                <div class="flex gap-2">
+                                    <button @click="editLesson(lesson)" class="text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 px-3.5 py-1.5 rounded-lg font-bold transition-colors">編輯</button>
+                                    <button @click="askDelete(lesson.id)" class="text-sm bg-rose-100 text-rose-700 hover:bg-rose-200 px-3.5 py-1.5 rounded-lg font-bold transition-colors">刪除</button>
+                                </div>
                             </div>
-                            <div class="flex gap-2 mt-3 sm:mt-0">
-                                <button @click="editLesson(lesson)" class="px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-medium transition">編輯</button>
-                                <button @click="deleteLesson(lesson.id)" class="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded font-medium transition">刪除</button>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="(word, idx) in lesson.words" :key="idx">
+                                    <span class="bg-white border border-teal-200 text-gray-700 px-3 py-1 rounded-lg text-sm shadow-sm" x-text="word"></span>
+                                </template>
                             </div>
                         </div>
                     </template>
                 </div>
             </div>
-        </main>
 
-        <!-- 管理員登入 Modal -->
-        <div x-show="showLoginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm" x-cloak>
-            <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm" @click.away="showLoginModal = false">
-                <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">老師管理登入</h3>
-                <input type="password" x-model="loginInput" @keyup.enter="verifyLogin()" placeholder="請輸入管理員密碼" class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-center focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200">
-                <p x-show="loginError" class="text-red-500 text-sm mb-4 text-center">密碼錯誤，請重試。</p>
-                <div class="flex gap-2">
-                    <button @click="showLoginModal = false" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition">取消</button>
-                    <button @click="verifyLogin()" class="flex-1 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition">登入</button>
+        </div>
+
+        <!-- 老師登入密碼視窗 (Modal) -->
+        <div x-show="showLoginModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showLoginModal = false" class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-teal-100">
+                <h3 class="text-2xl font-bold text-teal-800 mb-2 text-center">老師管理登入</h3>
+                <p class="text-gray-500 mb-6 text-center text-sm">請輸入管理員密碼（預設：<span class="font-mono font-bold text-teal-700">admin</span>）</p>
+                <input type="password" x-model="loginInput" @keyup.enter="verifyLogin()" class="w-full px-4 py-3 border-2 border-teal-300 rounded-xl focus:outline-none focus:border-teal-500 mb-3 text-center text-xl tracking-widest" placeholder="輸入密碼...">
+                <p x-show="loginError" class="text-rose-600 text-sm mb-4 text-center font-medium">密碼錯誤，請重新輸入！</p>
+                <div class="flex gap-3 mt-4">
+                    <button @click="showLoginModal = false" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors">取消</button>
+                    <button @click="verifyLogin()" class="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition-colors shadow-md">確認登入</button>
                 </div>
             </div>
         </div>
 
-        <!-- 修改密碼 Modal -->
-        <div x-show="showPasswordChangeModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm" x-cloak>
-            <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm" @click.away="showPasswordChangeModal = false">
-                <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">修改管理員密碼</h3>
-                <input type="password" x-model="newPasswordInput" @keyup.enter="updatePassword()" placeholder="請輸入新密碼" class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-center focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-200">
-                <div class="flex gap-2">
-                    <button @click="showPasswordChangeModal = false; newPasswordInput = ''" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition">取消</button>
-                    <button @click="updatePassword()" class="flex-1 py-2 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition">確認修改</button>
+        <!-- 修改密碼視窗 (Modal) -->
+        <div x-show="showPasswordChangeModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="showPasswordChangeModal = false" class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-teal-100">
+                <h3 class="text-2xl font-bold text-teal-800 mb-2 text-center">修改管理員密碼</h3>
+                <p class="text-gray-500 mb-6 text-center text-sm">請輸入新的管理員密碼</p>
+                <input type="password" x-model="newPasswordInput" @keyup.enter="updatePassword()" class="w-full px-4 py-3 border-2 border-teal-300 rounded-xl focus:outline-none focus:border-teal-500 mb-6 text-center text-xl tracking-widest" placeholder="輸入新密碼...">
+                <div class="flex gap-3">
+                    <button @click="showPasswordChangeModal = false" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors">取消</button>
+                    <button @click="updatePassword()" class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors shadow-md">儲存修改</button>
                 </div>
             </div>
         </div>
 
-    </div>
+        <!-- 刪除確認視窗 (Modal) -->
+        <div x-show="deleteTargetId !== null" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div @click.away="deleteTargetId = null" class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-rose-100 text-center">
+                <h3 class="text-2xl font-bold text-gray-800 mb-2">確定要刪除嗎？</h3>
+                <p class="text-gray-500 mb-6 text-sm">刪除後該課文的圈詞資料將無法復原。</p>
+                <div class="flex gap-3">
+                    <button @click="deleteTargetId = null" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition-colors">取消</button>
+                    <button @click="confirmDelete()" class="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-colors shadow-md">確定刪除</button>
+                </div>
+            </div>
+        </div>
 
-    <!-- Firebase SDK & 應用程式邏輯 -->
+    </main>
+
+    <!-- 統一由 ES Module 載入 Alpine.js 與 Firebase，徹底消除載入時間差 (Race Condition) -->
     <script type="module">
+        import Alpine from "https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/module.esm.js";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // ==========================================
-        // ⚠️ 請替換為您自己的 Firebase 專案設定 ⚠️
-        // ==========================================
-  const firebaseConfig = {
+        // =========================================================================
+        // 1. Web Audio API 音效生成函數 (PlaySound) - 不依賴外部 .mp3 檔案
+        // =========================================================================
+        let audioCtx = null;
+        window.PlaySound = function(type) {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+                if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                    gainNode.gain.setValueAtTime(0.15, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                    osc.start(now);
+                    osc.stop(now + 0.45);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.linearRampToValueAtTime(110, now + 0.3);
+                    gainNode.gain.setValueAtTime(0.15, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(600, now);
+                    gainNode.gain.setValueAtTime(0.08, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                }
+            } catch (e) {
+                console.warn("音效播放略過:", e);
+            }
+        };
+
+        // =========================================================================
+        // 2. 註冊 Alpine.js 元件與狀態
+        // =========================================================================
+        Alpine.data('dictationApp', () => ({
+            // 畫面模式 ('student' | 'admin')
+            viewMode: 'student',
+            lessons: [],
+            toasts: [],
+            
+            // 學生聽寫狀態
+            isPlaying: false,
+            isFinished: false,
+            currentLesson: null,
+            currentWordIndex: 0,
+            showAnswer: false,
+            userInput: '',
+            isChecking: false,
+            speechRate: 0.8,
+            twVoice: null,
+
+            // 老師管理驗證與密碼狀態
+            adminPassword: 'admin',
+            isAdminAuthenticated: false,
+            showLoginModal: false,
+            loginInput: '',
+            loginError: false,
+            showPasswordChangeModal: false,
+            newPasswordInput: '',
+
+            // 課文新增/修改表單狀態
+            isEditing: false,
+            editId: null,
+            formTitle: '',
+            formWordsText: '',
+            isSaving: false,
+            deleteTargetId: null,
+
+            // 資料庫連線狀態
+            db: null,
+            useLocalFallback: false,
+
+            get currentWord() {
+                return this.currentLesson?.words[this.currentWordIndex] || '';
+            },
+
+            async init() {
+                // 初始化台灣語音 (zh-TW)
+                this.initSpeechSynthesis();
+                if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
+                    window.speechSynthesis.onvoiceschanged = () => this.initSpeechSynthesis();
+                }
+
+                // 初始化 Firebase 或本機儲存備援
+                await this.initDatabase();
+            },
+
+            initSpeechSynthesis() {
+                if (!('speechSynthesis' in window)) return;
+                const voices = window.speechSynthesis.getVoices();
+                // 嚴格優先尋找台灣 (zh-TW) 語音
+                this.twVoice = voices.find(v => v.lang === 'zh-TW' || v.lang === 'zh-Hant-TW' || v.name.includes('Taiwan') || v.name.includes('臺灣') || v.name.includes('台灣'))
+                            || voices.find(v => v.lang && v.lang.includes('zh'))
+                            || null;
+            },
+
+            speakText(text) {
+                if (!('speechSynthesis' in window)) {
+                    this.showToast('您的瀏覽器不支援語音合成功能', 'error');
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                if (this.twVoice) {
+                    utterance.voice = this.twVoice;
+                }
+                utterance.lang = 'zh-TW';
+                utterance.rate = this.speechRate;
+                window.speechSynthesis.speak(utterance);
+            },
+
+            async initDatabase() {
+                // ⚠️ 如需連接您自己的 Firebase，請將下方設定替換為您的專案金鑰
+     const firebaseConfig = {
   apiKey: "AIzaSyCd3tqkmxYzFC30hsj63WGLrCmbgoHKrN4",
   authDomain: "listen-e8f45.firebaseapp.com",
   projectId: "listen-e8f45",
@@ -172,236 +410,305 @@
   appId: "1:835797547922:web:70ac8c25e932a53ef29f4b"
 };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        
-        // 音效系統
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        function playSound(type) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            if (type === 'success') {
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                oscillator.start(audioCtx.currentTime);
-                oscillator.stop(audioCtx.currentTime + 0.5);
-            } else if (type === 'error') {
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
-                oscillator.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-                oscillator.start(audioCtx.currentTime);
-                oscillator.stop(audioCtx.currentTime + 0.3);
-            }
-        }
+                // 檢查是否尚未替換預設字串，若尚未設定則自動啟用 LocalStorage 本地儲存與範例課文
+                if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+                    this.useLocalFallback = true;
+                    this.loadLocalData();
+                    return;
+                }
 
-        // 語音系統
-        function speakWord(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'zh-TW';
-                utterance.rate = 0.8;
-                window.speechSynthesis.speak(utterance);
-            }
-        }
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    this.db = getFirestore(app);
 
-        // 綁定 Alpine.js 資料模型至全域 (解決模組載入時間差問題)
-        window.dictationApp = () => ({
-            // 基礎狀態
-            appMode: 'student',
-            lessons: [], 
-            
-            // 表單狀態
-            isEditing: false,
-            isSaving: false,
-            editingId: null,
-            formTitle: '',
-            formWordsText: '',
-            
-            // 權限與密碼狀態
-            isAdminAuthenticated: false,
-            showLoginModal: false,
-            loginInput: '',
-            loginError: false,
-            adminPassword: 'admin',
-            showPasswordChangeModal: false,
-            newPasswordInput: '',
-            
-            // 測驗進行狀態
-            isDictating: false,
-            currentLesson: null,
-            currentWords: [],
-            currentWordIndex: 0,
-            studentAnswer: '',
-
-            init() {
-                this.fetchLessons();
-                this.fetchAdminConfig();
-            },
-
-            fetchLessons() {
-                onSnapshot(collection(db, "lessons"), (snapshot) => {
-                    let fetchedLessons = [];
-                    snapshot.forEach((doc) => {
-                        fetchedLessons.push({ id: doc.id, ...doc.data() });
+                    // 監聽課文集合
+                    onSnapshot(collection(this.db, "lessons"), (snapshot) => {
+                        const loaded = [];
+                        snapshot.forEach(d => loaded.push({ id: d.id, ...d.data() }));
+                        this.lessons = loaded.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                    }, (err) => {
+                        console.warn("Firebase 讀取切換為本機模式:", err);
+                        this.useLocalFallback = true;
+                        this.loadLocalData();
                     });
-                    this.lessons = fetchedLessons;
-                }, (error) => {
-                    console.error("讀取課文失敗:", error);
-                    // 本地測試用假資料
-                    if(this.lessons.length === 0) {
-                        this.lessons = [{ id: 'test1', title: '範例課文(請確認Firebase設定)', words: ['測試'] }];
-                    }
-                });
+
+                    // 監聽管理員密碼設定
+                    onSnapshot(doc(this.db, "settings", "config"), (docSnap) => {
+                        if (docSnap.exists() && docSnap.data().adminPassword) {
+                            this.adminPassword = docSnap.data().adminPassword;
+                        }
+                    });
+                } catch (error) {
+                    console.warn("切換為本機儲存模式:", error);
+                    this.useLocalFallback = true;
+                    this.loadLocalData();
+                }
             },
 
-            fetchAdminConfig() {
-                onSnapshot(doc(db, "settings", "config"), (docSnapshot) => {
-                    if (docSnapshot.exists()) {
-                        this.adminPassword = docSnapshot.data().adminPassword || 'admin';
-                    }
-                });
+            loadLocalData() {
+                const savedLessons = localStorage.getItem('tw_dictation_lessons');
+                if (savedLessons) {
+                    this.lessons = JSON.parse(savedLessons);
+                } else {
+                    this.lessons = [
+                        { id: 'demo-1', title: '第一課 美麗的寶島', words: ['台灣', '玉山', '日月潭', '風景', '溫暖'], timestamp: 1 }
+                    ];
+                    localStorage.setItem('tw_dictation_lessons', JSON.stringify(this.lessons));
+                }
+                const savedPwd = localStorage.getItem('tw_dictation_pwd');
+                if (savedPwd) {
+                    this.adminPassword = savedPwd;
+                }
             },
 
+            // --- 模式切換與管理員驗證 (同時支援 toggleMode 與 switchMode) ---
             toggleMode() {
-                if (this.appMode === 'student') {
-                    if (!this.isAdminAuthenticated) {
+                window.PlaySound('click');
+                if (this.viewMode === 'student') {
+                    if (this.isAdminAuthenticated) {
+                        this.viewMode = 'admin';
+                        this.stopDictation();
+                    } else {
                         this.loginInput = '';
                         this.loginError = false;
                         this.showLoginModal = true;
-                    } else {
-                        this.appMode = 'teacher';
                     }
                 } else {
-                    this.appMode = 'student';
+                    this.viewMode = 'student';
                     this.resetForm();
+                }
+            },
+
+            switchMode(mode) {
+                if (mode === 'admin' && this.viewMode !== 'admin') {
+                    this.toggleMode();
+                } else if (mode === 'student' && this.viewMode !== 'student') {
+                    this.toggleMode();
                 }
             },
 
             verifyLogin() {
                 if (this.loginInput === this.adminPassword) {
+                    window.PlaySound('success');
                     this.isAdminAuthenticated = true;
                     this.showLoginModal = false;
-                    this.appMode = 'teacher';
+                    this.loginError = false;
+                    this.viewMode = 'admin';
+                    this.stopDictation();
+                    this.showToast('登入成功！歡迎進入老師管理模式', 'success');
                 } else {
+                    window.PlaySound('error');
                     this.loginError = true;
+                    this.loginInput = '';
                 }
             },
 
+            openPasswordModal() {
+                window.PlaySound('click');
+                this.newPasswordInput = '';
+                this.showPasswordChangeModal = true;
+            },
+
             async updatePassword() {
-                if (!this.newPasswordInput.trim()) return;
+                const newPwd = this.newPasswordInput.trim();
+                if (!newPwd) {
+                    this.showToast('密碼不能為空白！', 'error');
+                    return;
+                }
                 try {
-                    await setDoc(doc(db, "settings", "config"), {
-                        adminPassword: this.newPasswordInput.trim()
-                    }, { merge: true });
-                    alert('密碼修改成功！');
+                    if (!this.useLocalFallback && this.db) {
+                        await setDoc(doc(this.db, "settings", "config"), { adminPassword: newPwd }, { merge: true });
+                    }
+                    localStorage.setItem('tw_dictation_pwd', newPwd);
+                    this.adminPassword = newPwd;
                     this.showPasswordChangeModal = false;
                     this.newPasswordInput = '';
+                    window.PlaySound('success');
+                    this.showToast('管理員密碼已成功更新！', 'success');
                 } catch (error) {
-                    console.error("修改密碼失敗", error);
-                    alert('密碼修改失敗');
+                    console.error("更新密碼失敗:", error);
+                    this.showToast('密碼更新失敗', 'error');
                 }
+            },
+
+            // --- 老師課文管理 (批次匯入、修改、刪除) ---
+            parseWords(text) {
+                return text.split(/[\n,，、\s]+/).map(w => w.trim()).filter(w => w.length > 0);
             },
 
             async saveLesson() {
                 if (!this.formTitle.trim() || !this.formWordsText.trim()) return;
+                const wordsArray = this.parseWords(this.formWordsText);
+                if (wordsArray.length === 0) {
+                    this.showToast('請至少輸入一個圈詞', 'error');
+                    return;
+                }
+
                 this.isSaving = true;
-                const wordsArray = this.formWordsText.split(/[\s\n]+/).filter(w => w.trim() !== '');
-                const lessonData = { title: this.formTitle.trim(), words: wordsArray };
+                const id = (this.isEditing && this.editId) ? this.editId : ('lesson-' + Date.now());
+                const payload = {
+                    title: this.formTitle.trim(),
+                    words: wordsArray,
+                    timestamp: Date.now()
+                };
 
                 try {
-                    if (this.isEditing) {
-                        await updateDoc(doc(db, "lessons", this.editingId), lessonData);
-                        alert('更新成功！');
+                    if (!this.useLocalFallback && this.db) {
+                        await setDoc(doc(this.db, "lessons", id), payload, { merge: true });
                     } else {
-                        await addDoc(collection(db, "lessons"), lessonData);
-                        alert('新增成功！');
+                        if (this.isEditing) {
+                            this.lessons = this.lessons.map(l => l.id === id ? { id, ...payload } : l);
+                        } else {
+                            this.lessons.push({ id, ...payload });
+                        }
+                        localStorage.setItem('tw_dictation_lessons', JSON.stringify(this.lessons));
                     }
+                    window.PlaySound('success');
+                    this.showToast(this.isEditing ? '課文修改成功！' : '課文新增成功！', 'success');
                     this.resetForm();
                 } catch (error) {
-                    console.error("儲存失敗", error);
-                    alert('儲存失敗');
+                    console.error("儲存課文失敗:", error);
+                    this.showToast('儲存失敗，請檢查設定', 'error');
                 } finally {
                     this.isSaving = false;
                 }
             },
 
             editLesson(lesson) {
+                window.PlaySound('click');
                 this.isEditing = true;
-                this.editingId = lesson.id;
+                this.editId = lesson.id;
                 this.formTitle = lesson.title;
-                this.formWordsText = lesson.words.join('\n'); 
+                this.formWordsText = lesson.words.join('\n');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             },
 
-            async deleteLesson(id) {
-                if (confirm('確定要刪除這課嗎？')) {
-                    try {
-                        await deleteDoc(doc(db, "lessons", id));
-                    } catch (error) {
-                        console.error("刪除失敗", error);
-                        alert('刪除失敗');
+            askDelete(id) {
+                window.PlaySound('click');
+                this.deleteTargetId = id;
+            },
+
+            async confirmDelete() {
+                if (!this.deleteTargetId) return;
+                const id = this.deleteTargetId;
+                this.deleteTargetId = null;
+
+                try {
+                    if (!this.useLocalFallback && this.db) {
+                        await deleteDoc(doc(this.db, "lessons", id));
+                    } else {
+                        this.lessons = this.lessons.filter(l => l.id !== id);
+                        localStorage.setItem('tw_dictation_lessons', JSON.stringify(this.lessons));
                     }
+                    if (this.isEditing && this.editId === id) {
+                        this.resetForm();
+                    }
+                    window.PlaySound('click');
+                    this.showToast('課文已刪除', 'info');
+                } catch (error) {
+                    console.error("刪除失敗:", error);
+                    this.showToast('刪除失敗', 'error');
                 }
             },
 
             resetForm() {
                 this.isEditing = false;
-                this.editingId = null;
+                this.editId = null;
                 this.formTitle = '';
                 this.formWordsText = '';
             },
 
+            // --- 學生聽寫流程 ---
             startDictation(lesson) {
-                if(lesson.words.length === 0) return alert('這課沒有圈詞！');
+                if (!lesson.words || lesson.words.length === 0) {
+                    this.showToast('這課還沒有圈詞喔！', 'error');
+                    return;
+                }
+                window.PlaySound('click');
                 this.currentLesson = lesson;
-                this.currentWords = [...lesson.words]; 
                 this.currentWordIndex = 0;
-                this.studentAnswer = '';
-                this.isDictating = true;
-                setTimeout(() => this.playWordAudio(), 500);
+                this.isPlaying = true;
+                this.isFinished = false;
+                this.showAnswer = false;
+                this.userInput = '';
+
+                setTimeout(() => {
+                    this.speakText(this.currentWord);
+                }, 400);
             },
 
-            playWordAudio() {
-                speakWord(this.currentWords[this.currentWordIndex]);
+            stopDictation() {
+                window.PlaySound('click');
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                this.isPlaying = false;
+                this.isFinished = false;
+                this.currentLesson = null;
+            },
+
+            repeatWord() {
+                window.PlaySound('click');
+                this.speakText(this.currentWord);
+            },
+
+            revealAnswer() {
+                window.PlaySound('click');
+                this.showAnswer = true;
             },
 
             checkAnswer() {
-                const correctAnswer = this.currentWords[this.currentWordIndex];
-                if (this.studentAnswer.trim() === correctAnswer) {
-                    playSound('success');
-                    if (this.currentWordIndex < this.currentWords.length - 1) {
-                        this.currentWordIndex++;
-                        this.studentAnswer = '';
-                        setTimeout(() => this.playWordAudio(), 800);
-                    } else {
-                        alert(`太棒了！測驗完成！`);
-                        this.endDictation();
-                    }
+                if (!this.userInput.trim() || this.isChecking) return;
+                if (this.userInput.trim() === this.currentWord) {
+                    window.PlaySound('success');
+                    this.showAnswer = true;
+                    this.isChecking = true;
+                    this.showToast('答對了！好棒！', 'success');
+                    setTimeout(() => {
+                        this.isChecking = false;
+                        this.nextWord();
+                    }, 1000);
                 } else {
-                    playSound('error');
-                    alert('答錯囉，目前要寫的是「' + correctAnswer + '」');
-                    this.studentAnswer = '';
-                    this.playWordAudio();
+                    window.PlaySound('error');
+                    this.showToast('字寫錯囉，請再聽一次試試看！', 'error');
+                    this.userInput = '';
+                    this.speakText(this.currentWord);
                 }
             },
 
-            endDictation() {
-                this.isDictating = false;
-                this.currentLesson = null;
-                this.currentWords = [];
-                this.studentAnswer = '';
+            nextWord() {
+                if (this.currentWordIndex < this.currentLesson.words.length - 1) {
+                    window.PlaySound('click');
+                    this.currentWordIndex++;
+                    this.showAnswer = false;
+                    this.userInput = '';
+                    this.speakText(this.currentWord);
+                } else {
+                    window.PlaySound('success');
+                    this.isFinished = true;
+                }
+            },
+
+            prevWord() {
+                if (this.currentWordIndex > 0) {
+                    window.PlaySound('click');
+                    this.currentWordIndex--;
+                    this.showAnswer = false;
+                    this.userInput = '';
+                    this.speakText(this.currentWord);
+                }
+            },
+
+            showToast(message, type = 'info') {
+                const id = Date.now() + Math.random();
+                this.toasts.push({ id, message, type });
+                setTimeout(() => {
+                    this.toasts = this.toasts.filter(t => t.id !== id);
+                }, 2800);
             }
-        });
+        }));
+
+        // 3. 確保所有變數與函數都註冊完畢後，才啟動 Alpine
+        window.Alpine = Alpine;
+        Alpine.start();
     </script>
 </body>
 </html>
